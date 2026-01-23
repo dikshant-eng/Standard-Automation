@@ -8,4 +8,4 @@ Feature: Verify successful user login to ERP Next System
     And I click the "Login" button
     Then I should be on the "Testv16Home" page
     Then I generate the selectors for the page
-    And I stop the debugger here
+
