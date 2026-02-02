@@ -7,6 +7,7 @@ import io.cucumber.java.en.When;
 import net.thucydides.core.annotations.Steps;
 import net.serenitybdd.core.Serenity;
 import org.openqa.selenium.By;
+import org.openqa.selenium.Keys;
 import org.openqa.selenium.WebElement;
 
 import java.lang.reflect.Field;
@@ -68,6 +69,11 @@ public class FieldInteractionsStepDefinitions {
         Class<?> pageClass = pageObjectOperations.getPageClass(currentPage);
         Field clickableElement = pageObjectOperations.poeFieldClass(poe, currentPage);
         perform.clickOn(clickableElement, pageClass);
+
+        // ⏱️ Wait 5 seconds on the same page
+        try {
+            Thread.sleep(7000);
+        } catch (InterruptedException ignored) {}
     }
 
     @When("I set the {string} dropdown as {string}")
@@ -126,29 +132,79 @@ public class FieldInteractionsStepDefinitions {
     }
 
     @When("I select {string} option from the Search field in the header")
-    public void iSelectOptionFromTheSearchFieldInTheHeader(String pageName) throws InterruptedException {
-        WebElement searchBar = perform.getWebElement(By.id("navbar-search"));
-        perform.settingFieldValue(searchBar, pageName);
-        Thread.sleep(500);
-        List<WebElement> selectListOptions = perform.getWebElements(By.cssSelector("header.navbar ul[role='listbox'] li"));
-        boolean optionFound = false;
-        for (WebElement selectListOption : selectListOptions) {
-            if (selectListOption.getText().equals(pageName)) {
-                perform.clickOn(selectListOption);
-                optionFound = true;
+    public void iSelectOptionFromTheSearchFieldInTheHeader(String pageName) {
+
+        // 1️⃣ Open global search
+        WebElement searchButton = perform.getWebElement(
+                By.id("desktop-navbar-modal-search")
+        );
+        perform.clickOn(searchButton);
+
+        // 2️⃣ Type search keyword
+        WebElement searchInput = perform.getWebElement(By.id("navbar-search"));
+        searchInput.clear();
+        searchInput.sendKeys(pageName);
+
+        String searchKey = pageName.toLowerCase().trim();
+
+        // 3️⃣ Retry loop to handle Awesomplete DOM refresh
+        for (int attempt = 0; attempt < 10; attempt++) {
+            try {
+                List<WebElement> options = perform.getDriver()
+                        .findElements(By.cssSelector(".awesomplete ul[role='listbox'] li a span"));
+
+                WebElement bestMatch = null;
+
+                for (WebElement option : options) {
+
+                    String optionText = option.getText()
+                            .replace("\n", " ")
+                            .toLowerCase()
+                            .trim();
+
+                    // 1️⃣ Exact match (highest priority)
+                    if (optionText.equals(searchKey)) {
+                        searchInput.sendKeys(Keys.ENTER);
+                        return;
+                    }
+
+                    // 2️⃣ Starts-with match
+                    if (bestMatch == null && optionText.startsWith(searchKey)) {
+                        bestMatch = option;
+                    }
+
+                    // 3️⃣ Contains match (fallback)
+                    if (bestMatch == null && optionText.contains(searchKey)) {
+                        bestMatch = option;
+                    }
+                }
+
+                // Use best available match
+                if (bestMatch != null) {
+                    searchInput.sendKeys(Keys.ENTER);
+                    return;
+                }
+
+            } catch (org.openqa.selenium.StaleElementReferenceException ignored) {
+                // DOM refreshed, retry
             }
+
+            try { Thread.sleep(300); } catch (InterruptedException ignored) {}
         }
-        if (!optionFound) throw new RuntimeException("Unable to find select option: " + pageName + " from the Awesome Search");
+
+        throw new RuntimeException(
+                "No search result matched the keyword: " + pageName
+        );
     }
 
-    @When("I generate the selectors for the page")
-    public void iGenerateTheSelectorsForThePage() {
-        String currentPage = Serenity.sessionVariableCalled("Current Page");
-        Class<?> pageClass = pageObjectOperations.getPageClass(currentPage);
-        String loadedElement = "";
-        if (currentPage.contains("dialogs")) {
-            loadedElement = "DIALOG_LOADED";
-        } else if (currentPage.contains("section")) {
+        @When("I generate the selectors for the page")
+        public void iGenerateTheSelectorsForThePage () {
+            String currentPage = Serenity.sessionVariableCalled("Current Page");
+            Class<?> pageClass = pageObjectOperations.getPageClass(currentPage);
+            String loadedElement = "";
+            if (currentPage.contains("dialogs")) {
+                loadedElement = "DIALOG_LOADED";
+            } else if (currentPage.contains("section")) {
             loadedElement = "SECTION_LOADED";
         } else if (currentPage.contains("grid")) {
             loadedElement = "GRID_LOADED";
